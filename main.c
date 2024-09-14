@@ -9,26 +9,15 @@
 #include <string.h>
 
 #define ARRAY_LEN(xs) sizeof(xs)/sizeof(xs[0])
-//#define song "C418 - Mice On Venus.mp3"
 #define N 256
 #define pi 3.14159265358979323846f
 
-#define song "Deftones - Be Quiet and Drive (Far Away).mp3"
-
-/*
- * @RAYLIB Samples 
- * According to the example given in their repo,
- * SAMPLES are stored internally as a float
- */
+#define song "samples/Deftones - Be Quiet and Drive (Far Away).mp3"
 
 typedef struct {
     float left;
     float right;
 } Frame;
-
-/*
- * @GLOBAL FRAMES DECLARATION
- */
 
 float freqs[N];
 Frame global_frames[4800] = {0};
@@ -36,6 +25,7 @@ size_t global_frames_count = 0;
 float in[N];
 float complex out[N];
 float max_amp;
+
 
 void fft(float in[], size_t stride, float complex out[], size_t n) {
   /*
@@ -117,32 +107,37 @@ void callback(void *bufferData, unsigned int frames) {
   }
 }
 
+
+// New function to draw a cool rectangle
+void DrawCoolRectangle(float x, float y, float width, float height, Color color) {
+    DrawRectangle(x, y, width, height, color);
+    DrawRectangleLines(x, y, width, height, ColorAlpha(WHITE, 0.3f));
+    DrawCircle(x + width / 2, y, width / 4, ColorAlpha(WHITE, 0.2f));
+}
+
 int main() {
+    const int screenWidth = 1280;
+    const int screenHeight = 720;
     
-    InitWindow(800, 600, "Testing");
+    InitWindow(screenWidth, screenHeight, "Enhanced Music Visualizer");
     SetTargetFPS(60);
 
     InitAudioDevice();
     Music music = LoadMusicStream(song);
     assert(music.stream.sampleSize == 32);
     assert(music.stream.channels == 2);
-    printf("framecount = %u\n", music.frameCount);
-    printf("samplerate = %u\n", music.stream.sampleRate);
-    printf("samplesize = %u\n", music.stream.sampleSize);
-    printf("channels = %u\n", music.stream.channels);
-    /*
-     * @INFO
-     * PlayMusicStream(Music music) does not load the entire song to the memory
-     * You will need to keep updating the streams in an event loop
-     */
+
     SetMusicVolume(music, 0.5f); 
     PlayMusicStream(music);
     AttachAudioStreamProcessor(music.stream, callback);
-    /*
-     * @Event loop
-     */
-    while (!WindowShouldClose())
-    {
+
+    // Load font for text
+    Font font = LoadFontEx("resources/fonts/monogram.ttf", 24, NULL, 0);
+
+    // Create a render texture to act as a semi-transparent overlay
+    RenderTexture2D overlay = LoadRenderTexture(screenWidth, screenHeight);
+
+    while (!WindowShouldClose()) {
         UpdateMusicStream(music);
 
         if (IsKeyPressed(KEY_SPACE)) {
@@ -152,22 +147,48 @@ int main() {
                 ResumeMusicStream(music);
             }
         }
-        int w = GetRenderWidth();
-        int h = GetRenderHeight();
+
         BeginDrawing();
-        ClearBackground(GREEN);
-        float cell_width = (float)w/N;
-        for (size_t i=0;i<N;i++) {
-          float t = amp(out[i])/max_amp;
-          DrawRectangle(i*cell_width, h/2 - h/2*t, cell_width, h/2*t, BLUE); 
-        } 
-        /*if (IsMusicStreamPlaying(music)) {*/
-        /*    ClearBackground(GREEN);*/
-        /*} else {*/
-        /*  ClearBackground(RED);*/
-        /*}*/
+            ClearBackground(BLACK);
+
+            // Draw semi-transparent grey background
+            BeginTextureMode(overlay);
+                DrawRectangle(0, 0, screenWidth, screenHeight, ColorAlpha(GRAY, 0.2f));
+            EndTextureMode();
+            DrawTextureRec(overlay.texture, (Rectangle){ 0, 0, screenWidth, -screenHeight }, (Vector2){ 0, 0 }, WHITE);
+
+            // Draw visualizer bars
+            float cell_width = (float)screenWidth / N;
+            for (size_t i = 0; i < N; i++) {
+                float t = amp(out[i]) / max_amp;
+                Color barColor = ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f);
+                DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * t, cell_width, screenHeight * t, barColor);
+            }
+
+            // Draw song title
+            const char* songTitle = "Deftones - Be Quiet and Drive (Far Away)";
+            Vector2 titleSize = MeasureTextEx(font, songTitle, 40, 2);
+            DrawTextEx(font, songTitle, (Vector2){screenWidth/2 - titleSize.x/2, 20}, 40, 2, WHITE);
+
+            // Draw song details
+            char details[100];
+            snprintf(details, sizeof(details), "Sample Rate: %u Hz | Channels: %d", music.stream.sampleRate, music.stream.channels);
+            Vector2 detailsSize = MeasureTextEx(font, details, 20, 1);
+            DrawRectangle(0, screenHeight - 40, screenWidth, 40, ColorAlpha(BLACK, 0.7f));
+            DrawTextEx(font, details, (Vector2){screenWidth/2 - detailsSize.x/2, screenHeight - 30}, 20, 1, WHITE);
+
+            // Draw play/pause status
+            const char* status = IsMusicStreamPlaying(music) ? "Playing" : "Paused";
+            DrawTextEx(font, status, (Vector2){10, 10}, 20, 1, WHITE);
+
         EndDrawing();
     }
     
+    UnloadFont(font);
+    UnloadRenderTexture(overlay);
+    UnloadMusicStream(music);
+    CloseAudioDevice();
+    CloseWindow();
+
     return 0;
 }
