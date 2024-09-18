@@ -50,6 +50,17 @@ float complex     out[N];
 float             max_amp;
 char              selected_song[512] = DEFAULT_SONG;
 VisualizationMode currentMode        = STANDARD;
+const char *helpCommands[] = {
+    "f            - Play a media file (GTK file dialog will open)\n",
+    "<Space>      - Pause music\n",
+    "m            - Toggle mute\n",
+    "<UP-ARROW>   - Increase volume by 10%",
+    "<DOWN-ARROW> - Decrease volume by 10%\n\n",
+    "----------------- VISUAL MODES ---------------------\n\n",
+    "v            - Cycle through visual modes (forward)\n",
+    "b            - Cycle through visual modes (backward)\n",
+    "? - Display the list of available commands"
+};
 
 /*************************************************************
  *
@@ -280,6 +291,35 @@ void handleVisualization(float cell_width, const int screenHeight, const int scr
   }
 }
 
+void DrawHelpBox(bool showHelp, Font font, const int screenHeight, const int screenWidth) {
+    if (showHelp) {
+        // Define the dimensions for the larger help box
+        int boxWidth = screenWidth/2;
+        int boxHeight = screenHeight/2;
+        int boxX = (GetScreenWidth() - boxWidth) / 2;  // Center the box horizontally
+        int boxY = (GetScreenHeight() - boxHeight) / 2; // Center the box vertically
+
+        // Draw the outer glowing rectangle for space-themed effect
+        DrawRectangle(boxX - 10, boxY - 10, boxWidth + 20, boxHeight + 20, DARKBLUE);  // Outer glow effect
+        DrawRectangle(boxX, boxY, boxWidth, boxHeight, ColorAlpha(BLACK, 0.85f)); // Main box
+
+        // Draw the title with a futuristic font and glowing effect
+        DrawTextEx(font, "Help", (Vector2){boxX + 20, boxY + 20}, 30, 2, SKYBLUE);
+
+        // Create and display the text with commands
+        char helpText[1024];  // Increased size to accommodate more text
+        snprintf(helpText, sizeof(helpText), "Commands:\n");
+
+        // Append each command to the help text
+        for (int i = 0; i < ARRAY_LEN(helpCommands); i++) {
+            snprintf(helpText + strlen(helpText), sizeof(helpText) - strlen(helpText),
+                     "%s\n", helpCommands[i]);
+        }
+
+        // Display help text with a white glow effect
+        DrawTextEx(font, helpText, (Vector2){boxX + 20, boxY + 60}, 20, 1, WHITE);
+    }
+}
 
 void extract_metadata(const char *filename, MusicMetadata *metadata) {
     AVFormatContext *fmt_ctx = NULL;
@@ -343,7 +383,9 @@ int main()
 
   // Button properties for the info button
   Rectangle infoButton = {screenWidth - 100, 20, 80, 40};
+  Rectangle helpButton = {screenWidth - 100, 80, 60, 30};
   bool      showInfo   = false; // Toggle to display info box
+  bool      showHelp   = false;
 
   while (!WindowShouldClose())
   {
@@ -377,6 +419,10 @@ int main()
       PlayMusicStream(music);
       extract_metadata(selected_song, &metadata);
       AttachAudioStreamProcessor(music.stream, callback);
+    }
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && IsMouseOverRectangle(helpButton))
+    {
+        showHelp = !showHelp;
     }
 
     // Volume controls
@@ -460,6 +506,8 @@ int main()
     // Draw info button
     DrawRectangleRec(infoButton, showInfo ? ORANGE : GRAY);
     DrawTextEx(font, "INFO", (Vector2){infoButton.x + 10, infoButton.y + 10}, 20, 1, WHITE);
+    DrawRectangleRec(helpButton, showHelp ? ORANGE : GRAY);
+    DrawTextEx(font, "?", (Vector2){helpButton.x + 15, helpButton.y + 5}, 20, 1, WHITE);
 
     // Display info box if the button is toggled
     if (showInfo) {
@@ -492,6 +540,9 @@ int main()
 
         // Add a glowing nebula at the bottom-right corner
         DrawCircleGradient(380, 280, 50, ColorAlpha(SKYBLUE, 0.2f), ColorAlpha(PURPLE, 0.0f)); // Nebula glow
+    }
+    if (showHelp) {
+      DrawHelpBox(showHelp, font, screenHeight, screenWidth);
     }
 
     EndDrawing();
