@@ -13,13 +13,21 @@
 #define N             256
 #define pi            3.14159265358979323846f
 
-#define DEFAULT_SONG "/home/s1dd/Downloads/Songs/Metallica - Seek & Destroy - Remastered.mp3"
+#define DEFAULT_SONG "/home/s1dd/Downloads/Songs/C418 - Wet Hands.mp3"
 
 typedef struct
 {
   float left;
   float right;
 } Frame;
+
+typedef enum {
+  STANDARD,
+  WAVEFORM,
+  STARBURST,
+  RADIAL_BARS,
+  NUM_MODES = 4
+} VisualizationMode;
 
 /********************************************************
  * $GLOBAL VARIABLES DECLARATION
@@ -32,6 +40,7 @@ float         in[N];
 float complex out[N];
 float         max_amp;
 char          selected_song[512] = DEFAULT_SONG;
+VisualizationMode currentMode       = STANDARD;
 
 /*************************************************************
  *
@@ -105,6 +114,16 @@ float amp(float complex z)
   if (a < b)
     return b;
   return a;
+}
+
+void SwitchVisualizationModeForward()
+{
+    currentMode = (currentMode + 1) % NUM_MODES;
+}
+
+void SwitchVisualizationModeBackward()
+{
+  currentMode = (currentMode - 1) % NUM_MODES;
 }
 
 void callback(void* bufferData, unsigned int frames)
@@ -183,6 +202,80 @@ void OpenFileDialog()
   }
 }
 
+void handleVisualization(float cell_width, const int screenHeight, const int screenWidth)
+{
+  if (currentMode == STANDARD)
+    {
+      for (size_t i = 0; i < N; i++)
+      {
+        float t        = amp(out[i]) / max_amp;
+        Color barColor = ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f);
+        DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * t, cell_width,
+                          screenHeight * t, barColor);
+      }
+    }
+    else if (currentMode == WAVEFORM)
+    {
+      
+      Vector2 center = {screenWidth / 2, screenHeight / 2};
+
+      for (size_t i = 0; i < N; i++)
+      {
+          float amplitude = amp(out[i]) / max_amp;
+          float radius = amplitude * 200.0f;
+          
+          float angle = (2 * PI * i) / N;
+          float x = center.x + cosf(angle) * (200 + radius);
+          float y = center.y + sinf(angle) * (200 + radius);
+          
+          DrawCircle(x, y, 3.0f, ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
+      }
+
+    } else if (currentMode == STARBURST)
+    {
+      Vector2 center = {screenWidth / 2, screenHeight / 2};
+
+      for (size_t i = 0; i < N - 1; i++)
+      {
+          float amplitude1 = amp(out[i]) / max_amp;
+          float amplitude2 = amp(out[i + 1]) / max_amp;
+
+          float bar_length1 = amplitude1 * 200.0f;
+          float bar_length2 = amplitude2 * 200.0f;
+
+          float angle1 = (2 * PI * i) / N;
+          float angle2 = (2 * PI * (i + 1)) / N;
+          
+          float x1 = center.x + cosf(angle1) * (50 + bar_length1);
+          float y1 = center.y + sinf(angle1) * (50 + bar_length1);
+          
+          float x2 = center.x + cosf(angle2) * (50 + bar_length2);
+          float y2 = center.y + sinf(angle2) * (50 + bar_length2);
+
+          DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 2.0f, ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
+      }
+
+    } else if (currentMode == RADIAL_BARS)
+    {
+      Vector2 center = {screenWidth / 2, screenHeight / 2};
+
+      for (size_t i = 0; i < N; i++)
+      {
+          float amplitude = amp(out[i]) / max_amp;
+          float bar_length = amplitude * 200.0f;
+
+          float angle = (2 * PI * i) / N;
+          float x1 = center.x + cosf(angle) * 50;  // Inner radius of 50 pixels
+          float y1 = center.y + sinf(angle) * 50;
+          float x2 = center.x + cosf(angle) * (50 + bar_length);
+          float y2 = center.y + sinf(angle) * (50 + bar_length);
+
+          DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 3.0f, ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
+      }
+
+    }
+}
+
 int main()
 {
   const int screenWidth  = 1280;
@@ -196,7 +289,11 @@ int main()
   assert(music.stream.sampleSize == 32);
   assert(music.stream.channels == 2);
 
-  SetMusicVolume(music, 0.5f);
+  float currentVolume = 1.0f; // Volume control (initially set to full)
+  float lastVolume    = currentVolume; // Used for toggling mute/unmute state
+  bool isMuted        = false;
+
+  SetMusicVolume(music, currentVolume);
   PlayMusicStream(music);
   AttachAudioStreamProcessor(music.stream, callback);
 
@@ -240,6 +337,47 @@ int main()
       AttachAudioStreamProcessor(music.stream, callback);
     }
 
+    // Volume controls
+    if (IsKeyPressed(KEY_UP))
+    {
+      currentVolume += 0.1f;
+      if (currentVolume > 1.0f)
+        currentVolume = 1.0f; // Max volume
+      SetMusicVolume(music, currentVolume);
+      isMuted = false;
+    }
+    if (IsKeyPressed(KEY_DOWN))
+    {
+      currentVolume -= 0.1f;
+      if (currentVolume < 0.0f)
+        currentVolume = 0.0f; // Min volume (mute)
+      SetMusicVolume(music, currentVolume);
+      isMuted = false;
+    }
+    if (IsKeyPressed(KEY_V))
+    {
+      SwitchVisualizationModeForward();
+    }
+    if (IsKeyPressed(KEY_B)) 
+    {
+      SwitchVisualizationModeBackward();
+    }
+    if (IsKeyPressed(KEY_M))
+    {
+      if (isMuted)
+      {
+        currentVolume = lastVolume;
+        isMuted      = false;
+      }
+      else
+      {
+        lastVolume   = currentVolume;
+        currentVolume = 0.0f; // Mute
+        isMuted      = true;
+      }
+      SetMusicVolume(music, currentVolume);
+    }
+
     BeginDrawing();
     ClearBackground(BLACK);
 
@@ -250,13 +388,7 @@ int main()
                    WHITE);
 
     float cell_width = (float)screenWidth / N;
-    for (size_t i = 0; i < N; i++)
-    {
-      float t        = amp(out[i]) / max_amp;
-      Color barColor = ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f);
-      DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * t, cell_width,
-                        screenHeight * t, barColor);
-    }
+    handleVisualization(cell_width, screenHeight, screenWidth);
 
     // Draw song title
     const char* songTitle = "rAVen";
@@ -278,12 +410,16 @@ int main()
     const char* status = IsMusicStreamPlaying(music) ? "Playing" : "Paused";
     DrawTextEx(font, status, (Vector2){10, 10}, 20, 1, WHITE);
 
+    // Draw volume level
+    char volumeBuffer[50];
+    snprintf(volumeBuffer, sizeof(volumeBuffer), "Volume: %.0f%%", currentVolume * 100);
+    DrawTextEx(font, volumeBuffer, (Vector2){10, 40}, 20, 1, WHITE);
+
     // Draw info button
     DrawRectangleRec(infoButton, showInfo ? ORANGE : GRAY);
     DrawTextEx(font, "INFO", (Vector2){infoButton.x + 10, infoButton.y + 10}, 20, 1, WHITE);
 
     // Display info box if the button is toggled
-
     if (showInfo)
     {
       DrawRectangle(20, 100, 300, 120, ColorAlpha(BLACK, 0.8f));
