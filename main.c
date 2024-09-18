@@ -21,7 +21,8 @@ typedef struct
   float right;
 } Frame;
 
-typedef enum {
+typedef enum
+{
   STANDARD,
   WAVEFORM,
   STARBURST,
@@ -33,14 +34,14 @@ typedef enum {
  * $GLOBAL VARIABLES DECLARATION
  ********************************************************/
 
-float         freqs[N];
-Frame         global_frames[4800] = {0};
-size_t        global_frames_count = 0;
-float         in[N];
-float complex out[N];
-float         max_amp;
-char          selected_song[512] = DEFAULT_SONG;
-VisualizationMode currentMode       = STANDARD;
+float             freqs[N];
+Frame             global_frames[4800] = {0};
+size_t            global_frames_count = 0;
+float             in[N];
+float complex     out[N];
+float             max_amp;
+char              selected_song[512] = DEFAULT_SONG;
+VisualizationMode currentMode        = STANDARD;
 
 /*************************************************************
  *
@@ -116,15 +117,9 @@ float amp(float complex z)
   return a;
 }
 
-void SwitchVisualizationModeForward()
-{
-    currentMode = (currentMode + 1) % NUM_MODES;
-}
+void SwitchVisualizationModeForward() { currentMode = (currentMode + 1) % NUM_MODES; }
 
-void SwitchVisualizationModeBackward()
-{
-  currentMode = (currentMode - 1) % NUM_MODES;
-}
+void SwitchVisualizationModeBackward() { currentMode = (currentMode - 1) % NUM_MODES; }
 
 void callback(void* bufferData, unsigned int frames)
 {
@@ -205,75 +200,76 @@ void OpenFileDialog()
 void handleVisualization(float cell_width, const int screenHeight, const int screenWidth)
 {
   if (currentMode == STANDARD)
+  {
+    for (size_t i = 0; i < N; i++)
     {
-      for (size_t i = 0; i < N; i++)
-      {
-        float t        = amp(out[i]) / max_amp;
-        Color barColor = ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f);
-        DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * t, cell_width,
-                          screenHeight * t, barColor);
-      }
+      float t        = amp(out[i]) / max_amp;
+      Color barColor = ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f);
+      DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * t, cell_width,
+                        screenHeight * t, barColor);
     }
-    else if (currentMode == WAVEFORM)
+  }
+  else if (currentMode == WAVEFORM)
+  {
+
+    Vector2 center = {screenWidth / 2, screenHeight / 2};
+
+    for (size_t i = 0; i < N; i++)
     {
-      
-      Vector2 center = {screenWidth / 2, screenHeight / 2};
+      float amplitude = amp(out[i]) / max_amp;
+      float radius    = amplitude * 200.0f;
 
-      for (size_t i = 0; i < N; i++)
-      {
-          float amplitude = amp(out[i]) / max_amp;
-          float radius = amplitude * 200.0f;
-          
-          float angle = (2 * PI * i) / N;
-          float x = center.x + cosf(angle) * (200 + radius);
-          float y = center.y + sinf(angle) * (200 + radius);
-          
-          DrawCircle(x, y, 3.0f, ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
-      }
+      float angle = (2 * PI * i) / N;
+      float x     = center.x + cosf(angle) * (200 + radius);
+      float y     = center.y + sinf(angle) * (200 + radius);
 
-    } else if (currentMode == STARBURST)
-    {
-      Vector2 center = {screenWidth / 2, screenHeight / 2};
-
-      for (size_t i = 0; i < N - 1; i++)
-      {
-          float amplitude1 = amp(out[i]) / max_amp;
-          float amplitude2 = amp(out[i + 1]) / max_amp;
-
-          float bar_length1 = amplitude1 * 200.0f;
-          float bar_length2 = amplitude2 * 200.0f;
-
-          float angle1 = (2 * PI * i) / N;
-          float angle2 = (2 * PI * (i + 1)) / N;
-          
-          float x1 = center.x + cosf(angle1) * (50 + bar_length1);
-          float y1 = center.y + sinf(angle1) * (50 + bar_length1);
-          
-          float x2 = center.x + cosf(angle2) * (50 + bar_length2);
-          float y2 = center.y + sinf(angle2) * (50 + bar_length2);
-
-          DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 2.0f, ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
-      }
-
-    } else if (currentMode == RADIAL_BARS)
-    {
-      Vector2 center = {screenWidth / 2, screenHeight / 2};
-
-      for (size_t i = 0; i < N; i++)
-      {
-          float amplitude = amp(out[i]) / max_amp;
-          float bar_length = amplitude * 200.0f;
-
-          float angle = (2 * PI * i) / N;
-          float x1 = center.x + cosf(angle) * 50;  // Inner radius of 50 pixels
-          float y1 = center.y + sinf(angle) * 50;
-          float x2 = center.x + cosf(angle) * (50 + bar_length);
-          float y2 = center.y + sinf(angle) * (50 + bar_length);
-
-          DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 3.0f, ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
-      }
-
+      DrawCircle(x, y, 3.0f, ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
     }
+  }
+  else if (currentMode == STARBURST)
+  {
+    Vector2 center = {screenWidth / 2, screenHeight / 2};
+
+    for (size_t i = 0; i < N - 1; i++)
+    {
+      float amplitude1 = amp(out[i]) / max_amp;
+      float amplitude2 = amp(out[i + 1]) / max_amp;
+
+      float bar_length1 = amplitude1 * 200.0f;
+      float bar_length2 = amplitude2 * 200.0f;
+
+      float angle1 = (2 * PI * i) / N;
+      float angle2 = (2 * PI * (i + 1)) / N;
+
+      float x1 = center.x + cosf(angle1) * (50 + bar_length1);
+      float y1 = center.y + sinf(angle1) * (50 + bar_length1);
+
+      float x2 = center.x + cosf(angle2) * (50 + bar_length2);
+      float y2 = center.y + sinf(angle2) * (50 + bar_length2);
+
+      DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 2.0f,
+                 ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
+    }
+  }
+  else if (currentMode == RADIAL_BARS)
+  {
+    Vector2 center = {screenWidth / 2, screenHeight / 2};
+
+    for (size_t i = 0; i < N; i++)
+    {
+      float amplitude  = amp(out[i]) / max_amp;
+      float bar_length = amplitude * 200.0f;
+
+      float angle = (2 * PI * i) / N;
+      float x1    = center.x + cosf(angle) * 50; // Inner radius of 50 pixels
+      float y1    = center.y + sinf(angle) * 50;
+      float x2    = center.x + cosf(angle) * (50 + bar_length);
+      float y2    = center.y + sinf(angle) * (50 + bar_length);
+
+      DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 3.0f,
+                 ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f));
+    }
+  }
 }
 
 int main()
@@ -289,9 +285,9 @@ int main()
   assert(music.stream.sampleSize == 32);
   assert(music.stream.channels == 2);
 
-  float currentVolume = 1.0f; // Volume control (initially set to full)
+  float currentVolume = 1.0f;          // Volume control (initially set to full)
   float lastVolume    = currentVolume; // Used for toggling mute/unmute state
-  bool isMuted        = false;
+  bool  isMuted       = false;
 
   SetMusicVolume(music, currentVolume);
   PlayMusicStream(music);
@@ -358,7 +354,7 @@ int main()
     {
       SwitchVisualizationModeForward();
     }
-    if (IsKeyPressed(KEY_B)) 
+    if (IsKeyPressed(KEY_B))
     {
       SwitchVisualizationModeBackward();
     }
@@ -367,13 +363,13 @@ int main()
       if (isMuted)
       {
         currentVolume = lastVolume;
-        isMuted      = false;
+        isMuted       = false;
       }
       else
       {
-        lastVolume   = currentVolume;
+        lastVolume    = currentVolume;
         currentVolume = 0.0f; // Mute
-        isMuted      = true;
+        isMuted       = true;
       }
       SetMusicVolume(music, currentVolume);
     }
