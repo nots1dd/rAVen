@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libavformat/avformat.h>
 #include <unistd.h>
 
 #define ARRAY_LEN(xs) sizeof(xs) / sizeof(xs[0])
@@ -29,6 +30,13 @@ typedef enum
   RADIAL_BARS,
   NUM_MODES = 4
 } VisualizationMode;
+
+typedef struct {
+    char title[128];
+    char artist[128];
+    char album[128];
+    float duration;  // in seconds
+} MusicMetadata;
 
 /********************************************************
  * $GLOBAL VARIABLES DECLARATION
@@ -272,6 +280,41 @@ void handleVisualization(float cell_width, const int screenHeight, const int scr
   }
 }
 
+
+void extract_metadata(const char *filename, MusicMetadata *metadata) {
+    AVFormatContext *fmt_ctx = NULL;
+
+    // Open the audio file and read its header
+    if (avformat_open_input(&fmt_ctx, filename, NULL, NULL) < 0) {
+        printf("Could not open file: %s\n", filename);
+        return;
+    }
+
+    // Retrieve stream information
+    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
+        printf("Could not find stream information\n");
+        avformat_close_input(&fmt_ctx);
+        return;
+    }
+
+    AVDictionaryEntry *tag = NULL;
+
+    // Extract metadata (title, artist, album)
+    if ((tag = av_dict_get(fmt_ctx->metadata, "title", NULL, 0)))
+        strncpy(metadata->title, tag->value, sizeof(metadata->title) - 1);
+    if ((tag = av_dict_get(fmt_ctx->metadata, "artist", NULL, 0)))
+        strncpy(metadata->artist, tag->value, sizeof(metadata->artist) - 1);
+    if ((tag = av_dict_get(fmt_ctx->metadata, "album", NULL, 0)))
+        strncpy(metadata->album, tag->value, sizeof(metadata->album) - 1);
+
+    // Get the duration of the track in seconds
+    metadata->duration = (float)fmt_ctx->duration / AV_TIME_BASE;
+
+    // Close the input file and free the context
+    avformat_close_input(&fmt_ctx);
+}
+
+
 int main()
 {
   const int screenWidth  = 1280;
@@ -282,6 +325,8 @@ int main()
 
   InitAudioDevice();
   Music music = LoadMusicStream(selected_song);
+  MusicMetadata metadata = {0};
+  extract_metadata(selected_song, &metadata);
   assert(music.stream.sampleSize == 32);
   assert(music.stream.channels == 2);
 
@@ -330,6 +375,7 @@ int main()
       UnloadMusicStream(music);
       music = LoadMusicStream(selected_song);
       PlayMusicStream(music);
+      extract_metadata(selected_song, &metadata);
       AttachAudioStreamProcessor(music.stream, callback);
     }
 
@@ -416,16 +462,36 @@ int main()
     DrawTextEx(font, "INFO", (Vector2){infoButton.x + 10, infoButton.y + 10}, 20, 1, WHITE);
 
     // Display info box if the button is toggled
-    if (showInfo)
-    {
-      DrawRectangle(20, 100, 300, 120, ColorAlpha(BLACK, 0.8f));
-      DrawTextEx(font, "Track Info", (Vector2){40, 110}, 24, 2, WHITE);
-      char infoText[256];
-      snprintf(infoText, sizeof(infoText),
-               "Sample Rate: %d Hz\nChannels: %d\nSample Size: %d\nDuration: %.2f sec",
-               music.stream.sampleRate, music.stream.channels, music.stream.sampleSize,
-               GetMusicTimeLength(music));
-      DrawTextEx(font, infoText, (Vector2){40, 140}, 20, 1, WHITE);
+    if (showInfo) {
+        // Draw the outer glowing rectangle for space-themed effect
+        DrawRectangle(15, 95, 410, 210, DARKBLUE);  // Outer glow effect
+        DrawRectangle(20, 100, 400, 200, ColorAlpha(BLACK, 0.85f)); // Main box
+
+        // Draw the title with a futuristic font and glowing effect
+        DrawTextEx(font, "Track Info", (Vector2){40, 110}, 24, 2, SKYBLUE);
+
+        // Create and display the text with more metadata
+        char infoText[512];
+        snprintf(infoText, sizeof(infoText),
+                 "Title: %s\nArtist: %s\nAlbum: %s\n\nSample Rate: %d Hz\nChannels: %d\nSample Size: %d-bit\nDuration: %.2f sec",
+                 metadata.title[0] ? metadata.title : "Unknown",
+                 metadata.artist[0] ? metadata.artist : "Unknown",
+                 metadata.album[0] ? metadata.album : "Unknown",
+                 music.stream.sampleRate,
+                 music.stream.channels,
+                 music.stream.sampleSize,
+                 metadata.duration);
+
+        // Display metadata text with a white glow effect
+        DrawTextEx(font, infoText, (Vector2){40, 150}, 20, 1, WHITE);
+
+        // Add additional space elements (stars, nebula effect, etc.)
+        for (int i = 0; i < 50; i++) {
+            DrawCircle(rand() % 450 + 20, rand() % 220 + 100, 1, ColorAlpha(WHITE, 0.5f)); // Stars in the background
+        }
+
+        // Add a glowing nebula at the bottom-right corner
+        DrawCircleGradient(380, 280, 50, ColorAlpha(SKYBLUE, 0.2f), ColorAlpha(PURPLE, 0.0f)); // Nebula glow
     }
 
     EndDrawing();
