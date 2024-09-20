@@ -1,17 +1,17 @@
 #include <assert.h>
 #include <complex.h>
 #include <gtk/gtk.h>
+#include <libavformat/avformat.h>
 #include <math.h>
 #include <raylib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <libavformat/avformat.h>
 #include <unistd.h>
 
 #define ARRAY_LEN(xs) sizeof(xs) / sizeof(xs[0])
-#define N             256
+#define N             (1 << 13)
 #define pi            3.14159265358979323846f
 
 #define DEFAULT_SONG "/home/s1dd/Downloads/Songs/C418 - Wet Hands.mp3"
@@ -20,15 +20,24 @@
  * @COLOR PALETTE
  **************************************************/
 
-#define GRUVBOX_BG (Color){40, 40, 40, 255}        // #282828
-#define GRUVBOX_FG (Color){235, 219, 178, 255}     // #ebdbb2
-#define GRUVBOX_YELLOW (Color){250, 189, 47, 255}  // #fabd2f
-#define GRUVBOX_BLUE (Color){131, 165, 152, 255}   // #83a598
-#define GRUVBOX_GREEN (Color){184, 187, 38, 255}   // #b8bb26
-#define GRUVBOX_RED (Color){251, 73, 52, 255}      // #fb4934
-#define GRUVBOX_ORANGE (Color){254, 128, 25, 255}  // #fe8019
-#define GRUVBOX_AQUA (Color){142, 192, 124, 255}   // #8ec07c
-#define GRUVBOX_PURPLE (Color){211, 134, 155, 255} // #d3869b
+#define GRUVBOX_BG \
+  (Color) { 40, 40, 40, 255 } // #282828
+#define GRUVBOX_FG \
+  (Color) { 235, 219, 178, 255 } // #ebdbb2
+#define GRUVBOX_YELLOW \
+  (Color) { 250, 189, 47, 255 } // #fabd2f
+#define GRUVBOX_BLUE \
+  (Color) { 131, 165, 152, 255 } // #83a598
+#define GRUVBOX_GREEN \
+  (Color) { 184, 187, 38, 255 } // #b8bb26
+#define GRUVBOX_RED \
+  (Color) { 251, 73, 52, 255 } // #fb4934
+#define GRUVBOX_ORANGE \
+  (Color) { 254, 128, 25, 255 } // #fe8019
+#define GRUVBOX_AQUA \
+  (Color) { 142, 192, 124, 255 } // #8ec07c
+#define GRUVBOX_PURPLE \
+  (Color) { 211, 134, 155, 255 } // #d3869b
 
 typedef struct
 {
@@ -39,17 +48,19 @@ typedef struct
 typedef enum
 {
   STANDARD,
+  PIXEL,
   WAVEFORM,
   STARBURST,
   RADIAL_BARS,
-  NUM_MODES = 4
+  NUM_MODES = 5
 } VisualizationMode;
 
-typedef struct {
-    char title[128];
-    char artist[128];
-    char album[128];
-    float duration;  // in seconds
+typedef struct
+{
+  char  title[128];
+  char  artist[128];
+  char  album[128];
+  float duration; // returns in seconds
 } MusicMetadata;
 
 /********************************************************
@@ -64,17 +75,15 @@ float complex     out[N];
 float             max_amp;
 char              selected_song[512] = DEFAULT_SONG;
 VisualizationMode currentMode        = STANDARD;
-const char *helpCommands[] = {
-    "f            - Play a media file (GTK file dialog will open)\n",
-    "<Space>      - Pause music\n",
-    "m            - Toggle mute\n",
-    "<UP-ARROW>   - Increase volume by 10%\n",
-    "<DOWN-ARROW> - Decrease volume by 10%\n\n",
-    "----------------- VISUAL MODES ---------------------\n\n",
-    "v            - Cycle through visual modes (forward)\n",
-    "b            - Cycle through visual modes (backward)\n",
-    "? - Display the list of available commands"
-};
+const char* helpCommands[] = {"f            - Play a media file (GTK file dialog will open)\n",
+                              "<Space>      - Pause music\n",
+                              "m            - Toggle mute\n",
+                              "<UP-ARROW>   - Increase volume by 10%\n",
+                              "<DOWN-ARROW> - Decrease volume by 10%\n\n",
+                              "----------------- VISUAL MODES ---------------------\n\n",
+                              "v            - Cycle through visual modes (forward)\n",
+                              "b            - Cycle through visual modes (backward)\n",
+                              "? - Display the list of available commands"};
 
 /*************************************************************
  *
@@ -156,14 +165,13 @@ void SwitchVisualizationModeBackward() { currentMode = (currentMode - 1) % NUM_M
 
 void callback(void* bufferData, unsigned int frames)
 {
-  if (frames < N)
-    return;
 
   Frame* fs = bufferData;
 
   for (size_t i = 0; i < frames; i++)
   {
-    in[i] = fs[i].left;
+    memmove(in, in + 1, (N - 1) * sizeof(in[0]));
+    in[N - 1] = fs[i].left;
   }
 
   fft(in, 1, out, N);
@@ -180,9 +188,9 @@ void callback(void* bufferData, unsigned int frames)
 // Function to draw a cool rectangle (reused from earlier)
 void DrawCoolRectangle(float x, float y, float width, float height, Color color)
 {
-    DrawRectangle(x, y, width, height, color);  // Use passed color
-    DrawRectangleLines(x, y, width, height, ColorAlpha(GRUVBOX_FG, 0.3f));  // Gruvbox foreground
-    DrawCircle(x + width / 2, y, width / 4, ColorAlpha(GRUVBOX_AQUA, 0.2f));  // Aqua as an accent
+  DrawRectangle(x, y, width, height, color);                        // Use passed color
+  DrawRectangleLines(x, y, width, height, ColorAlpha(color, 0.3f)); // Gruvbox foreground
+  DrawCircle(x + width / 2, y, width / 4, ColorAlpha(color, 0.2f)); // Aqua as an accent
 }
 
 // Function to check if the mouse is hovering over a rectangle (used for the info button)
@@ -230,55 +238,150 @@ void OpenFileDialog()
   }
 }
 
-void handleVisualization(float cell_width, const int screenHeight, const int screenWidth)
-{
-    Vector2 center = {screenWidth / 2, screenHeight / 2};
-    
-    for (size_t i = 0; i < N; i++)
-    {
-        float t = amp(out[i]) / max_amp;
-        Color barColor = ColorFromHSV(i * 360.0f / N, 0.8f, 0.9f);  // Dynamic colors
-        
-        switch (currentMode)
-        {
-            case STANDARD:
-                barColor = GRUVBOX_YELLOW;  // Use Gruvbox yellow for bars
-                DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * t, cell_width, screenHeight * t, barColor);
-                break;
+void handleVisualization(float cell_width, const int screenHeight, const int screenWidth, size_t m) {
+    Vector2 center = {screenWidth / 2, screenHeight / 2}; // Calculate the center point for drawing
+    float step = 0.4f; // [0.01 - 0.06 looks good ig]
+    float maxAmplitude = max_amp > 0 ? max_amp : 1;
 
-            case WAVEFORM:
-                // Adjust Gruvbox colors for waveform
-                float radius = amp(out[i]) / max_amp * 200.0f;
-                float angle = (2 * PI * i) / N;
-                float x = center.x + cosf(angle) * (200 + radius);
-                float y = center.y + sinf(angle) * (200 + radius);
-                DrawCircle(x, y, 3.0f, GRUVBOX_BLUE);  // Gruvbox blue for points
-                break;
+    // Calculate amplitude for all points once
+    float amplitudes[N];
+    for (size_t i = 0; i < N; i++) {
+        amplitudes[i] = amp(out[i]) / maxAmplitude; // Normalize amplitude
+    }
 
-            case STARBURST:
-            {
-                float amplitude1 = amp(out[i]) / max_amp * 200.0f;
-                float amplitude2 = amp(out[i + 1]) / max_amp * 200.0f;
-                float angle1 = (2 * PI * i) / N;
-                float angle2 = (2 * PI * (i + 1)) / N;
-                float x1 = center.x + cosf(angle1) * (50 + amplitude1);
-                float y1 = center.y + sinf(angle1) * (50 + amplitude1);
-                float x2 = center.x + cosf(angle2) * (50 + amplitude2);
-                float y2 = center.y + sinf(angle2) * (50 + amplitude2);
-                DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 2.0f, GRUVBOX_AQUA);
-                break;
-            }
+    // Store previous amplitudes for smoothing
+    static float previousAmplitudes[N] = {0};
 
-            case RADIAL_BARS:
-            {
-                // Draw radial bars with Gruvbox color for bars and alternating colors
-                float bar_length = amp(out[i]) / max_amp * 200.0f;
-                float x1 = center.x + cosf((2 * PI * i) / N) * 50;
-                float y1 = center.y + sinf((2 * PI * i) / N) * 50;
-                float x2 = center.x + cosf((2 * PI * i) / N) * (50 + bar_length);
-                float y2 = center.y + sinf((2 * PI * i) / N) * (50 + bar_length);
-                DrawLineEx((Vector2){x1, y1}, (Vector2){x2, y2}, 3.0f, i % 2 == 0 ? GRUVBOX_ORANGE : GRUVBOX_GREEN);
-                break;
+    for (size_t i = 0; i < N - 1; i++) {
+        if (amplitudes[i] > 0.01f) {
+            switch (currentMode) {
+                /*******************************************************
+                 *
+                 * @STANDARD MODE
+                 *
+                 * Draws rectangles representing amplitudes as bars.
+                 * The height of each rectangle corresponds to the amplitude.
+                 *
+                 *******************************************************/
+                case STANDARD:
+                {
+                    DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * amplitudes[i],
+                                      cell_width * step, screenHeight * amplitudes[i], GRUVBOX_RED);
+                    break;
+                }
+
+                /*******************************************************
+                 *
+                 * @PIXEL MODE
+                 *
+                 * Similar to STANDARD, but with a larger step to create 
+                 * a pixelated effect. This enhances the blocky appearance.
+                 *
+                 *******************************************************/
+                case PIXEL:
+                {
+                    step = 1.06f; // Adjust step for pixelated effect
+                    DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * amplitudes[i],
+                                      cell_width * step, screenHeight * amplitudes[i], GRUVBOX_PURPLE);
+                    break;
+                }
+
+                /*******************************************************
+                 *
+                 * @WAVEFORM MODE
+                 *
+                 * Visualizes the amplitudes as a line waveform.
+                 * Connects the amplitude points with lines for smooth transitions.
+                 *
+                 *******************************************************/
+                case WAVEFORM:
+                {
+                    Vector2 start = {i * cell_width, center.y + (screenHeight / 2) * amplitudes[i]};
+                    Vector2 end = {(i + 1) * cell_width, center.y + (screenHeight / 2) * amplitudes[i + 1]};
+                    DrawLineEx(start, end, 2.0f, GRUVBOX_BLUE);
+                    break;
+                }
+
+                /*******************************************************
+                 *
+                 * @STARBURST MODE
+                 *
+                 * Draws radial lines (rays) emanating from the center.
+                 * Each ray's length is determined by the amplitude, and 
+                 * color varies based on the index.
+                 *
+                 *******************************************************/
+                case STARBURST:
+                {
+                    float angle = i * 360.0f / m; // Calculate angle for each ray WRT freq range
+                    Vector2 end = {
+                        center.x + cos(angle * DEG2RAD) * amplitudes[i] * (screenHeight / 2),
+                        center.y + sin(angle * DEG2RAD) * amplitudes[i] * (screenHeight / 2)
+                    };
+
+                    // Select a color based on the index
+                    Color rayColor;
+                    switch (i % 6) {
+                        case 0: rayColor = GRUVBOX_YELLOW; break;
+                        case 1: rayColor = GRUVBOX_BLUE; break;
+                        case 2: rayColor = GRUVBOX_GREEN; break;
+                        case 3: rayColor = GRUVBOX_RED; break;
+                        case 4: rayColor = GRUVBOX_ORANGE; break;
+                        case 5: rayColor = GRUVBOX_PURPLE; break;
+                    }
+
+                    DrawLineEx(center, end, 2.0f, rayColor); // Draw the ray
+                    break;
+                }
+
+                /*******************************************************
+                 *
+                 * @RADIAL BARS MODE
+                 *
+                 * Draws bars radiating from the center, similar to STARBURST,
+                 * but using circular sections. The length of each bar is
+                 * based on the amplitude, and bars have a color scheme.
+                 *
+                 *******************************************************/
+                case RADIAL_BARS:
+                {
+                    float angle = i * 360.0f / m; // Calculate angle for each bar WRT audio freq range
+                    float innerRadius = screenHeight / 8; // Radius for inner circle
+                    float outerRadius = screenHeight / 4; // Base radius for bars
+                    float amplitudeScale = screenHeight / 4; // Scaling factor for amplitude
+
+                    // Draw the inner circle
+                    DrawCircle(center.x, center.y, innerRadius, GRUVBOX_FG);
+                    DrawCircleLines(center.x, center.y, innerRadius, GRUVBOX_FG);
+
+                    Vector2 start = {
+                        center.x + cos(angle * DEG2RAD) * outerRadius,
+                        center.y + sin(angle * DEG2RAD) * outerRadius
+                    };
+
+                    // Use a smoothed amplitude value [by taking average of prev and current amps]
+                    float smoothedAmplitude = (previousAmplitudes[i] + amplitudes[i]) * 0.5; // Simple averaging
+                    previousAmplitudes[i] = smoothedAmplitude; // Store for next frame
+
+                    Vector2 end = {
+                        center.x + cos(angle * DEG2RAD) * (outerRadius + smoothedAmplitude * amplitudeScale),
+                        center.y + sin(angle * DEG2RAD) * (outerRadius + smoothedAmplitude * amplitudeScale)
+                    };
+
+                    // Color selection
+                    Color barColor;
+                    switch (i % 6) {
+                        case 0: barColor = GRUVBOX_YELLOW; break;
+                        case 1: barColor = GRUVBOX_BLUE; break;
+                        case 2: barColor = GRUVBOX_GREEN; break;
+                        case 3: barColor = GRUVBOX_ORANGE; break;
+                        case 4: barColor = GRUVBOX_AQUA; break;
+                        case 5: barColor = GRUVBOX_PURPLE; break;
+                    }
+
+                    DrawLineEx(start, end, cell_width * step, barColor); // Draw the radial bar
+                    break;
+                }
             }
         }
     }
@@ -286,113 +389,152 @@ void handleVisualization(float cell_width, const int screenHeight, const int scr
 
 void DrawHelpBox(bool showHelp, Font font, const int screenHeight, const int screenWidth)
 {
-    if (showHelp)
+  if (showHelp)
+  {
+    int boxWidth  = screenWidth / 2;
+    int boxHeight = screenHeight / 2 + 7; // some padding
+    int boxX      = (GetScreenWidth() - boxWidth) / 2;
+    int boxY      = (GetScreenHeight() - boxHeight) / 2;
+
+    // Draw the outer glowing rectangle using Gruvbox red for the border
+    DrawRectangle(boxX - 10, boxY - 10, boxWidth + 20, boxHeight + 20, GRUVBOX_RED);
+    DrawRectangle(boxX, boxY, boxWidth, boxHeight,
+                  ColorAlpha(GRUVBOX_BG, 0.95f)); // Gruvbox background
+
+    // Title with Gruvbox yellow
+    DrawTextEx(font, "Help for rAVen:", (Vector2){boxX + 20, boxY + 20}, 30, 2, GRUVBOX_YELLOW);
+
+    // Display help commands in Gruvbox foreground
+    char helpText[1024];
+    snprintf(helpText, sizeof(helpText), "Commands:\n");
+    for (int i = 0; i < ARRAY_LEN(helpCommands); i++)
     {
-        int boxWidth = screenWidth / 2;
-        int boxHeight = screenHeight / 2 + 7; // some padding
-        int boxX = (GetScreenWidth() - boxWidth) / 2;  
-        int boxY = (GetScreenHeight() - boxHeight) / 2;
-
-        // Draw the outer glowing rectangle using Gruvbox red for the border
-        DrawRectangle(boxX - 10, boxY - 10, boxWidth + 20, boxHeight + 20, GRUVBOX_RED); 
-        DrawRectangle(boxX, boxY, boxWidth, boxHeight, ColorAlpha(GRUVBOX_BG, 0.95f)); // Gruvbox background
-
-        // Title with Gruvbox yellow
-        DrawTextEx(font, "Help for rAVen:", (Vector2){boxX + 20, boxY + 20}, 30, 2, GRUVBOX_YELLOW);
-
-        // Display help commands in Gruvbox foreground
-        char helpText[1024];
-        snprintf(helpText, sizeof(helpText), "Commands:\n");
-        for (int i = 0; i < ARRAY_LEN(helpCommands); i++) {
-            snprintf(helpText + strlen(helpText), sizeof(helpText) - strlen(helpText),
-                     "%s\n", helpCommands[i]);
-        }
-        DrawTextEx(font, helpText, (Vector2){boxX + 20, boxY + 60}, 20, 1, GRUVBOX_FG);
+      snprintf(helpText + strlen(helpText), sizeof(helpText) - strlen(helpText), "%s\n",
+               helpCommands[i]);
     }
+    DrawTextEx(font, helpText, (Vector2){boxX + 20, boxY + 60}, 20, 1, GRUVBOX_FG);
+  }
 }
 
-void DrawSpaceTheme(Font font, Music music, MusicMetadata *metadata) {
-    // Draw the outer glowing rectangle for space-themed effect
-    DrawRectangle(15, 95, 410, 210, GRUVBOX_BLUE);  // Outer glow effect
-    DrawRectangle(20, 100, 400, 200, ColorAlpha(GRUVBOX_BG, 0.85f)); // Main box with Gruvbox background
-
-    // Draw the title with a Gruvbox-style glowing effect
-    DrawTextEx(font, "Track Info", (Vector2){40, 110}, 24, 2, GRUVBOX_YELLOW); // Gruvbox yellow for title
-
-    // Create and display the text with more metadata
-    char infoText[512];
-    snprintf(infoText, sizeof(infoText),
-             "Title: %s\nArtist: %s\nAlbum: %s\n\nSample Rate: %d Hz\nChannels: %d\nSample Size: %d-bit\nDuration: %.2f sec",
-             metadata->title[0] ? metadata->title : "Unknown",
-             metadata->artist[0] ? metadata->artist : "Unknown",
-             metadata->album[0] ? metadata->album : "Unknown",
-             music.stream.sampleRate,
-             music.stream.channels,
-             music.stream.sampleSize,
-             metadata->duration);
-
-    // Display metadata text with Gruvbox foreground color
-    DrawTextEx(font, infoText, (Vector2){40, 150}, 20, 1, GRUVBOX_FG);
-
-    // Add additional space elements (stars, nebula effect, etc.)
-    for (int i = 0; i < 50; i++) {
-        DrawCircle(rand() % 450 + 20, rand() % 220 + 100, 1, ColorAlpha(GRUVBOX_FG, 0.5f)); // Stars using Gruvbox foreground color
-    }
-
-    // Add a glowing nebula at the bottom-right corner using Gruvbox colors
-    DrawCircleGradient(380, 280, 50, ColorAlpha(GRUVBOX_AQUA, 0.2f), ColorAlpha(GRUVBOX_PURPLE, 0.0f)); // Nebula glow using Gruvbox aqua and purple
+void LimitText(char* dest, const char* src, int maxLength)
+{
+  if (strlen(src) > maxLength)
+  {
+    strncpy(dest, src, maxLength - 3); // Copy up to maxLength - 3 characters
+    dest[maxLength - 3] = '\0';        // Ensure null termination
+    strcat(dest, "...");               // Append "..." to indicate truncation
+  }
+  else
+  {
+    strcpy(dest, src); // Copy the full string if it fits within the limit
+  }
 }
 
-void extract_metadata(const char *filename, MusicMetadata *metadata) {
-    AVFormatContext *fmt_ctx = NULL;
+void DrawSpaceTheme(Font font, Music music, MusicMetadata* metadata)
+{
+  // Constants
+  int boxWidth  = 400; // Width of the text box
+  int padding   = 40;  // Padding for the text inside the box
+  int charLimit = 30;  // Maximum character limit for each line (adjust as needed)
 
-    // Open the audio file and read its header
-    if (avformat_open_input(&fmt_ctx, filename, NULL, NULL) < 0) {
-        printf("Could not open file: %s\n", filename);
-        return;
-    }
+  // Draw the outer glowing rectangle for space-themed effect
+  DrawRectangle(15, 95, 410, 210, GRUVBOX_BLUE); // Outer glow effect
+  DrawRectangle(20, 100, boxWidth, 200,
+                ColorAlpha(GRUVBOX_BG, 0.85f)); // Main box with Gruvbox background
 
-    // Retrieve stream information
-    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
-        printf("Could not find stream information\n");
-        avformat_close_input(&fmt_ctx);
-        return;
-    }
+  // Draw the title with a Gruvbox-style glowing effect
+  DrawTextEx(font, "Track Info", (Vector2){padding, 110}, 24, 2,
+             GRUVBOX_YELLOW); // Gruvbox yellow for title
 
-    AVDictionaryEntry *tag = NULL;
+  // Create and display the text with metadata
+  char title[128], artist[128], album[128];
+  LimitText(title, metadata->title[0] ? metadata->title : "Unknown", charLimit);
+  LimitText(artist, metadata->artist[0] ? metadata->artist : "Unknown", charLimit);
+  LimitText(album, metadata->album[0] ? metadata->album : "Unknown", charLimit);
 
-    // Extract metadata (title, artist, album)
-    if ((tag = av_dict_get(fmt_ctx->metadata, "title", NULL, 0))) {
-        strncpy(metadata->title, tag->value, sizeof(metadata->title) - 1);
-        metadata->title[sizeof(metadata->title) - 1] = '\0'; // Ensure null termination
-    } else {
-        strncpy(metadata->title, "Unknown Title", sizeof(metadata->title) - 1);
-        metadata->title[sizeof(metadata->title) - 1] = '\0';
-    }
+  char infoText[512];
+  snprintf(infoText, sizeof(infoText),
+           "Title: %s\nArtist: %s\nAlbum: %s\nSample Rate: %d Hz\nChannels: %d\nSample Size: "
+           "%d-bit\nDuration: %.2f sec",
+           title, artist, album, music.stream.sampleRate, music.stream.channels,
+           music.stream.sampleSize, metadata->duration);
 
-    if ((tag = av_dict_get(fmt_ctx->metadata, "artist", NULL, 0))) {
-        strncpy(metadata->artist, tag->value, sizeof(metadata->artist) - 1);
-        metadata->artist[sizeof(metadata->artist) - 1] = '\0';
-    } else {
-        strncpy(metadata->artist, "Unknown Artist", sizeof(metadata->artist) - 1);
-        metadata->artist[sizeof(metadata->artist) - 1] = '\0';
-    }
+  // Display the metadata text with Gruvbox foreground color
+  DrawTextEx(font, infoText, (Vector2){padding, 150}, 20, 1, GRUVBOX_FG);
 
-    if ((tag = av_dict_get(fmt_ctx->metadata, "album", NULL, 0))) {
-        strncpy(metadata->album, tag->value, sizeof(metadata->album) - 1);
-        metadata->album[sizeof(metadata->album) - 1] = '\0';
-    } else {
-        strncpy(metadata->album, "Unknown Album", sizeof(metadata->album) - 1);
-        metadata->album[sizeof(metadata->album) - 1] = '\0';
-    }
+  // Add additional space elements (stars, nebula effect, etc.)
+  for (int i = 0; i < 50; i++)
+  {
+    DrawCircle(rand() % 450 + 20, rand() % 220 + 100, 1,
+               ColorAlpha(GRUVBOX_FG, 0.5f)); // Stars using Gruvbox foreground color
+  }
 
-    // Extract duration in seconds
-    metadata->duration = fmt_ctx->duration / (float)AV_TIME_BASE;
+  // Add a glowing nebula at the bottom-right corner using Gruvbox colors
+  DrawCircleGradient(380, 280, 50, ColorAlpha(GRUVBOX_AQUA, 0.2f),
+                     ColorAlpha(GRUVBOX_PURPLE, 0.0f)); // Nebula glow using Gruvbox aqua and purple
+}
 
-    // Close the input context
+void extract_metadata(const char* filename, MusicMetadata* metadata)
+{
+  AVFormatContext* fmt_ctx = NULL;
+
+  // Open the audio file and read its header
+  if (avformat_open_input(&fmt_ctx, filename, NULL, NULL) < 0)
+  {
+    printf("Could not open file: %s\n", filename);
+    return;
+  }
+
+  // Retrieve stream information
+  if (avformat_find_stream_info(fmt_ctx, NULL) < 0)
+  {
+    printf("Could not find stream information\n");
     avformat_close_input(&fmt_ctx);
-}
+    return;
+  }
 
+  AVDictionaryEntry* tag = NULL;
+
+  // Extract metadata (title, artist, album)
+  if ((tag = av_dict_get(fmt_ctx->metadata, "title", NULL, 0)))
+  {
+    strncpy(metadata->title, tag->value, sizeof(metadata->title) - 1);
+    metadata->title[sizeof(metadata->title) - 1] = '\0';
+  }
+  else
+  {
+    strncpy(metadata->title, "Unknown Title", sizeof(metadata->title) - 1);
+    metadata->title[sizeof(metadata->title) - 1] = '\0';
+  }
+
+  if ((tag = av_dict_get(fmt_ctx->metadata, "artist", NULL, 0)))
+  {
+    strncpy(metadata->artist, tag->value, sizeof(metadata->artist) - 1);
+    metadata->artist[sizeof(metadata->artist) - 1] = '\0';
+  }
+  else
+  {
+    strncpy(metadata->artist, "Unknown Artist", sizeof(metadata->artist) - 1);
+    metadata->artist[sizeof(metadata->artist) - 1] = '\0';
+  }
+
+  if ((tag = av_dict_get(fmt_ctx->metadata, "album", NULL, 0)))
+  {
+    strncpy(metadata->album, tag->value, sizeof(metadata->album) - 1);
+    metadata->album[sizeof(metadata->album) - 1] = '\0';
+  }
+  else
+  {
+    strncpy(metadata->album, "Unknown Album", sizeof(metadata->album) - 1);
+    metadata->album[sizeof(metadata->album) - 1] = '\0';
+  }
+
+  // Extract duration in seconds
+  metadata->duration = fmt_ctx->duration / (float)AV_TIME_BASE;
+
+  // Close the input context
+  avformat_close_input(&fmt_ctx);
+}
 
 int main()
 {
@@ -403,13 +545,13 @@ int main()
   SetTargetFPS(60);
 
   InitAudioDevice();
-  Music music = LoadMusicStream(selected_song);
+  Music         music    = LoadMusicStream(selected_song);
   MusicMetadata metadata = {0};
   extract_metadata(selected_song, &metadata);
   assert(music.stream.sampleSize == 32);
   assert(music.stream.channels == 2);
 
-  float currentVolume = 1.0f;          // Volume control (initially set to full)
+  float currentVolume = 0.8f;          // Volume control (initially set to full)
   float lastVolume    = currentVolume; // Used for toggling mute/unmute state
   bool  isMuted       = false;
 
@@ -441,6 +583,10 @@ int main()
         ResumeMusicStream(music);
       }
     }
+    if (IsKeyPressed(KEY_Q))
+    {
+      break;
+    }
 
     // Detect if the user clicks on the info button
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && IsMouseOverRectangle(infoButton))
@@ -461,7 +607,7 @@ int main()
     }
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && IsMouseOverRectangle(helpButton))
     {
-        showHelp = !showHelp;
+      showHelp = !showHelp;
     }
 
     // Volume controls
@@ -514,13 +660,38 @@ int main()
     DrawTextureRec(overlay.texture, (Rectangle){0, 0, screenWidth, -screenHeight}, (Vector2){0, 0},
                    WHITE);
 
-    float cell_width = (float)screenWidth / N;
-    handleVisualization(cell_width, screenHeight, screenWidth);
+    /****************************************************************************
+     *
+     * @What is N? 
+     *
+     * It is the total number of frequency bins we need for audio analysis 
+     *
+     * I took 1<<13 (2 to the power 13) as it was the greatest power with the 
+     * optimal performance and actually looked very cool, overall this gave 
+     * the rAVen an actual AV experience.
+     *
+     * size_t m represents the frequency bands that will be visualized, so instead
+     * of iterating over N (which is a large number), we visualize an audio freq 
+     * range instead 
+     *
+     * I got step = 1.06f from an article online on conversion of frequencies to 
+     * visualizable audio
+     *
+     ****************************************************************************/
+    size_t m    = 0;
+    float  step = 1.06f;
+    for (float f = 20.0f; f < N; f *= step)
+    {
+      m++;
+    }
+    float cell_width = (float)screenWidth / m;
+    handleVisualization(cell_width, screenHeight, screenWidth, m);
 
     // Draw song title
     const char* songTitle = "rAVen";
     Vector2     titleSize = MeasureTextEx(font, songTitle, 40, 2);
-    DrawTextEx(font, songTitle, (Vector2){screenWidth / 2 - titleSize.x / 2, 20}, 40, 2, GRUVBOX_BLUE);
+    DrawTextEx(font, songTitle, (Vector2){screenWidth / 2 - titleSize.x / 2, 20}, 40, 2,
+               GRUVBOX_BLUE);
 
     // Draw song details
     float totalDuration = GetMusicTimeLength(music);
@@ -535,7 +706,8 @@ int main()
 
     // Draw play/pause status
     const char* status = IsMusicStreamPlaying(music) ? "Playing" : "Paused";
-    DrawTextEx(font, status, (Vector2){10, 10}, 20, 1, IsMusicStreamPlaying(music) ? GRUVBOX_GREEN : GRUVBOX_RED);
+    DrawTextEx(font, status, (Vector2){10, 10}, 20, 1,
+               IsMusicStreamPlaying(music) ? GRUVBOX_GREEN : GRUVBOX_RED);
 
     // Draw volume level
     char volumeBuffer[50];
@@ -549,10 +721,12 @@ int main()
     DrawTextEx(font, "?", (Vector2){helpButton.x + 15, helpButton.y + 5}, 20, 1, WHITE);
 
     // Display info box if the button is toggled
-    if (showInfo) {
-       DrawSpaceTheme(font, music, &metadata); 
+    if (showInfo)
+    {
+      DrawSpaceTheme(font, music, &metadata);
     }
-    if (showHelp) {
+    if (showHelp)
+    {
       DrawHelpBox(showHelp, font, screenHeight, screenWidth);
     }
 
