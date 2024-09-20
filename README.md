@@ -19,6 +19,8 @@ bash
 
 -> math, complex, assert for FFT
 
+-> libavformat for metadata extraction
+
 Other standard libs
 
 ## UNDERSTANDING FFT
@@ -37,9 +39,17 @@ chmod +x build.sh
 ./raven
 ```
 
-![2024-09-14_19-48-11](https://github.com/user-attachments/assets/8b7c1ace-f6a5-4bd3-b7c7-1733fe649b37)
+Using Makefile:
 
-![2024-09-14_19-48-28](https://github.com/user-attachments/assets/6a5a8dcc-8e94-42e8-911d-50759032309c)
+```sh
+make
+./raven
+```
+
+![raven1](https://github.com/user-attachments/assets/40ab07df-4f43-406d-b30f-77b133780d12)
+![raven2](https://github.com/user-attachments/assets/3aa6de17-62b4-4f64-9b35-31ec6d0fbb5b)
+![raven3](https://github.com/user-attachments/assets/51a291b7-12d6-41b1-af3d-52759791a093)
+
 
 
 rAVen is free and open source software licensed under GNU Lesser General Public License [LICENSE](https://github.com/nots1dd/raven/blob/main/LICENSE)
