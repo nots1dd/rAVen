@@ -2,6 +2,7 @@
 #include <complex.h>
 #include <gtk/gtk.h>
 #include <libavformat/avformat.h>
+#include <magic.h>
 #include <math.h>
 #include <raylib.h>
 #include <stdint.h>
@@ -13,8 +14,6 @@
 #define ARRAY_LEN(xs) sizeof(xs) / sizeof(xs[0])
 #define N             (1 << 13)
 #define pi            3.14159265358979323846f
-
-#define DEFAULT_SONG "/home/s1dd/Downloads/Songs/C418 - Wet Hands.mp3"
 
 /**************************************************
  * @COLOR PALETTE
@@ -73,17 +72,17 @@ size_t            global_frames_count = 0;
 float             in[N];
 float complex     out[N];
 float             max_amp;
-char              selected_song[512] = DEFAULT_SONG;
-VisualizationMode currentMode        = STANDARD;
-const char* helpCommands[] = {"f            - Play a media file (GTK file dialog will open)\n",
-                              "<Space>      - Pause music\n",
-                              "m            - Toggle mute\n",
-                              "<UP-ARROW>   - Increase volume by 10%\n",
-                              "<DOWN-ARROW> - Decrease volume by 10%\n\n",
-                              "----------------- VISUAL MODES ---------------------\n\n",
-                              "v            - Cycle through visual modes (forward)\n",
-                              "b            - Cycle through visual modes (backward)\n",
-                              "? - Display the list of available commands"};
+char              selected_song[512];
+VisualizationMode currentMode = STANDARD;
+const char* helpCommands[]    = {"f            - Play a media file (GTK file dialog will open)\n",
+                                 "<Space>      - Pause music\n",
+                                 "m            - Toggle mute\n",
+                                 "<UP-ARROW>   - Increase volume by 10%\n",
+                                 "<DOWN-ARROW> - Decrease volume by 10%\n\n",
+                                 "----------------- VISUAL MODES ---------------------\n\n",
+                                 "v            - Cycle through visual modes (forward)\n",
+                                 "b            - Cycle through visual modes (backward)\n",
+                                 "? - Display the list of available commands"};
 
 /*************************************************************
  *
@@ -102,6 +101,11 @@ const char* helpCommands[] = {"f            - Play a media file (GTK file dialog
  *  So using divide and conquer to modify DFT, we get FFT,
  *  an insanely fast version of fourier transform that has
  *  complexity of O(n*logn)
+ *
+ *  $WHY FFT?
+ *
+ *  We use FFT to break down audio signals into their frequency components, which is a more
+ *  intuitive and informative way to visualize sound than looking at a time-domain waveform alone
  *
  ************************************************************/
 
@@ -185,6 +189,19 @@ void callback(void* bufferData, unsigned int frames)
   }
 }
 
+int is_song_file(const char* filename)
+{
+  const char* extensions[] = {".mp3", ".wav", ".flac", ".aac", ".ogg", NULL};
+  for (int i = 0; extensions[i] != NULL; i++)
+  {
+    if (strstr(filename, extensions[i]) != NULL)
+    {
+      return 1; // It is a song file
+    }
+  }
+  return 0; // Not a song file
+}
+
 // Function to draw a cool rectangle (reused from earlier)
 void DrawCoolRectangle(float x, float y, float width, float height, Color color)
 {
@@ -238,153 +255,180 @@ void OpenFileDialog()
   }
 }
 
-void handleVisualization(float cell_width, const int screenHeight, const int screenWidth, size_t m) {
-    Vector2 center = {screenWidth / 2, screenHeight / 2}; // Calculate the center point for drawing
-    float step = 0.4f; // [0.01 - 0.06 looks good ig]
-    float maxAmplitude = max_amp > 0 ? max_amp : 1;
+void handleVisualization(float cell_width, const int screenHeight, const int screenWidth, size_t m)
+{
+  Vector2 center = {screenWidth / 2, screenHeight / 2}; // Calculate the center point for drawing
+  float   step   = 0.4f;                                // [0.01 - 0.06 looks good ig]
+  float   maxAmplitude = max_amp > 0 ? max_amp : 1;
 
-    // Calculate amplitude for all points once
-    float amplitudes[N];
-    for (size_t i = 0; i < N; i++) {
-        amplitudes[i] = amp(out[i]) / maxAmplitude; // Normalize amplitude
-    }
+  // Calculate amplitude for all points once
+  float amplitudes[N];
+  for (size_t i = 0; i < N; i++)
+  {
+    amplitudes[i] = amp(out[i]) / maxAmplitude; // Normalize amplitude
+  }
 
-    // Store previous amplitudes for smoothing
-    static float previousAmplitudes[N] = {0};
+  // Store previous amplitudes for smoothing
+  static float previousAmplitudes[N] = {0};
 
-    for (size_t i = 0; i < N - 1; i++) {
-        if (amplitudes[i] > 0.01f) {
-            switch (currentMode) {
-                /*******************************************************
-                 *
-                 * @STANDARD MODE
-                 *
-                 * Draws rectangles representing amplitudes as bars.
-                 * The height of each rectangle corresponds to the amplitude.
-                 *
-                 *******************************************************/
-                case STANDARD:
-                {
-                    DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * amplitudes[i],
-                                      cell_width * step, screenHeight * amplitudes[i], GRUVBOX_RED);
-                    break;
-                }
-
-                /*******************************************************
-                 *
-                 * @PIXEL MODE
-                 *
-                 * Similar to STANDARD, but with a larger step to create 
-                 * a pixelated effect. This enhances the blocky appearance.
-                 *
-                 *******************************************************/
-                case PIXEL:
-                {
-                    step = 1.06f; // Adjust step for pixelated effect
-                    DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * amplitudes[i],
-                                      cell_width * step, screenHeight * amplitudes[i], GRUVBOX_PURPLE);
-                    break;
-                }
-
-                /*******************************************************
-                 *
-                 * @WAVEFORM MODE
-                 *
-                 * Visualizes the amplitudes as a line waveform.
-                 * Connects the amplitude points with lines for smooth transitions.
-                 *
-                 *******************************************************/
-                case WAVEFORM:
-                {
-                    Vector2 start = {i * cell_width, center.y + (screenHeight / 2) * amplitudes[i]};
-                    Vector2 end = {(i + 1) * cell_width, center.y + (screenHeight / 2) * amplitudes[i + 1]};
-                    DrawLineEx(start, end, 2.0f, GRUVBOX_BLUE);
-                    break;
-                }
-
-                /*******************************************************
-                 *
-                 * @STARBURST MODE
-                 *
-                 * Draws radial lines (rays) emanating from the center.
-                 * Each ray's length is determined by the amplitude, and 
-                 * color varies based on the index.
-                 *
-                 *******************************************************/
-                case STARBURST:
-                {
-                    float angle = i * 360.0f / m; // Calculate angle for each ray WRT freq range
-                    Vector2 end = {
-                        center.x + cos(angle * DEG2RAD) * amplitudes[i] * (screenHeight / 2),
-                        center.y + sin(angle * DEG2RAD) * amplitudes[i] * (screenHeight / 2)
-                    };
-
-                    // Select a color based on the index
-                    Color rayColor;
-                    switch (i % 6) {
-                        case 0: rayColor = GRUVBOX_YELLOW; break;
-                        case 1: rayColor = GRUVBOX_BLUE; break;
-                        case 2: rayColor = GRUVBOX_GREEN; break;
-                        case 3: rayColor = GRUVBOX_RED; break;
-                        case 4: rayColor = GRUVBOX_ORANGE; break;
-                        case 5: rayColor = GRUVBOX_PURPLE; break;
-                    }
-
-                    DrawLineEx(center, end, 2.0f, rayColor); // Draw the ray
-                    break;
-                }
-
-                /*******************************************************
-                 *
-                 * @RADIAL BARS MODE
-                 *
-                 * Draws bars radiating from the center, similar to STARBURST,
-                 * but using circular sections. The length of each bar is
-                 * based on the amplitude, and bars have a color scheme.
-                 *
-                 *******************************************************/
-                case RADIAL_BARS:
-                {
-                    float angle = i * 360.0f / m; // Calculate angle for each bar WRT audio freq range
-                    float innerRadius = screenHeight / 8; // Radius for inner circle
-                    float outerRadius = screenHeight / 4; // Base radius for bars
-                    float amplitudeScale = screenHeight / 4; // Scaling factor for amplitude
-
-                    // Draw the inner circle
-                    DrawCircle(center.x, center.y, innerRadius, GRUVBOX_FG);
-                    DrawCircleLines(center.x, center.y, innerRadius, GRUVBOX_FG);
-
-                    Vector2 start = {
-                        center.x + cos(angle * DEG2RAD) * outerRadius,
-                        center.y + sin(angle * DEG2RAD) * outerRadius
-                    };
-
-                    // Use a smoothed amplitude value [by taking average of prev and current amps]
-                    float smoothedAmplitude = (previousAmplitudes[i] + amplitudes[i]) * 0.5; // Simple averaging
-                    previousAmplitudes[i] = smoothedAmplitude; // Store for next frame
-
-                    Vector2 end = {
-                        center.x + cos(angle * DEG2RAD) * (outerRadius + smoothedAmplitude * amplitudeScale),
-                        center.y + sin(angle * DEG2RAD) * (outerRadius + smoothedAmplitude * amplitudeScale)
-                    };
-
-                    // Color selection
-                    Color barColor;
-                    switch (i % 6) {
-                        case 0: barColor = GRUVBOX_YELLOW; break;
-                        case 1: barColor = GRUVBOX_BLUE; break;
-                        case 2: barColor = GRUVBOX_GREEN; break;
-                        case 3: barColor = GRUVBOX_ORANGE; break;
-                        case 4: barColor = GRUVBOX_AQUA; break;
-                        case 5: barColor = GRUVBOX_PURPLE; break;
-                    }
-
-                    DrawLineEx(start, end, cell_width * step, barColor); // Draw the radial bar
-                    break;
-                }
-            }
+  for (size_t i = 0; i < N - 1; i++)
+  {
+    if (amplitudes[i] > 0.01f)
+    {
+      switch (currentMode)
+      {
+        /*******************************************************
+         *
+         * @STANDARD MODE
+         *
+         * Draws rectangles representing amplitudes as bars.
+         * The height of each rectangle corresponds to the amplitude.
+         *
+         *******************************************************/
+        case STANDARD:
+        {
+          DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * amplitudes[i],
+                            cell_width * step, screenHeight * amplitudes[i], GRUVBOX_RED);
+          break;
         }
+
+        /*******************************************************
+         *
+         * @PIXEL MODE
+         *
+         * Similar to STANDARD, but with a larger step to create
+         * a pixelated effect. This enhances the blocky appearance.
+         *
+         *******************************************************/
+        case PIXEL:
+        {
+          step = 1.06f; // Adjust step for pixelated effect
+          DrawCoolRectangle(i * cell_width, screenHeight - screenHeight * amplitudes[i],
+                            cell_width * step, screenHeight * amplitudes[i], GRUVBOX_PURPLE);
+          break;
+        }
+
+        /*******************************************************
+         *
+         * @WAVEFORM MODE
+         *
+         * Visualizes the amplitudes as a line waveform.
+         * Connects the amplitude points with lines for smooth transitions.
+         *
+         *******************************************************/
+        case WAVEFORM:
+        {
+          Vector2 start = {i * cell_width, center.y + (screenHeight / 2) * amplitudes[i]};
+          Vector2 end   = {(i + 1) * cell_width, center.y + (screenHeight / 2) * amplitudes[i + 1]};
+          DrawLineEx(start, end, 2.0f, GRUVBOX_BLUE);
+          break;
+        }
+
+        /*******************************************************
+         *
+         * @STARBURST MODE
+         *
+         * Draws radial lines (rays) emanating from the center.
+         * Each ray's length is determined by the amplitude, and
+         * color varies based on the index.
+         *
+         *******************************************************/
+        case STARBURST:
+        {
+          float   angle = i * 360.0f / m; // Calculate angle for each ray WRT freq range
+          Vector2 end   = {center.x + cos(angle * DEG2RAD) * amplitudes[i] * (screenHeight / 2),
+                           center.y + sin(angle * DEG2RAD) * amplitudes[i] * (screenHeight / 2)};
+
+          // Select a color based on the index
+          Color rayColor;
+          switch (i % 6)
+          {
+            case 0:
+              rayColor = GRUVBOX_YELLOW;
+              break;
+            case 1:
+              rayColor = GRUVBOX_BLUE;
+              break;
+            case 2:
+              rayColor = GRUVBOX_GREEN;
+              break;
+            case 3:
+              rayColor = GRUVBOX_RED;
+              break;
+            case 4:
+              rayColor = GRUVBOX_ORANGE;
+              break;
+            case 5:
+              rayColor = GRUVBOX_PURPLE;
+              break;
+          }
+
+          DrawLineEx(center, end, 2.0f, rayColor); // Draw the ray
+          break;
+        }
+
+        /*******************************************************
+         *
+         * @RADIAL BARS MODE
+         *
+         * Draws bars radiating from the center, similar to STARBURST,
+         * but using circular sections. The length of each bar is
+         * based on the amplitude, and bars have a color scheme.
+         *
+         *******************************************************/
+        case RADIAL_BARS:
+        {
+          float angle       = i * 360.0f / m;   // Calculate angle for each bar WRT audio freq range
+          float innerRadius = screenHeight / 8; // Radius for inner circle
+          float outerRadius = screenHeight / 4; // Base radius for bars
+          float amplitudeScale = screenHeight / 4; // Scaling factor for amplitude
+
+          // Draw the inner circle
+          DrawCircle(center.x, center.y, innerRadius, GRUVBOX_FG);
+          DrawCircleLines(center.x, center.y, innerRadius, GRUVBOX_FG);
+
+          Vector2 start = {center.x + cos(angle * DEG2RAD) * outerRadius,
+                           center.y + sin(angle * DEG2RAD) * outerRadius};
+
+          // Use a smoothed amplitude value [by taking average of prev and current amps]
+          float smoothedAmplitude =
+            (previousAmplitudes[i] + amplitudes[i]) * 0.5; // Simple averaging
+          previousAmplitudes[i] = smoothedAmplitude;       // Store for next frame
+
+          Vector2 end = {
+            center.x + cos(angle * DEG2RAD) * (outerRadius + smoothedAmplitude * amplitudeScale),
+            center.y + sin(angle * DEG2RAD) * (outerRadius + smoothedAmplitude * amplitudeScale)};
+
+          // Color selection
+          Color barColor;
+          switch (i % 6)
+          {
+            case 0:
+              barColor = GRUVBOX_YELLOW;
+              break;
+            case 1:
+              barColor = GRUVBOX_BLUE;
+              break;
+            case 2:
+              barColor = GRUVBOX_GREEN;
+              break;
+            case 3:
+              barColor = GRUVBOX_ORANGE;
+              break;
+            case 4:
+              barColor = GRUVBOX_AQUA;
+              break;
+            case 5:
+              barColor = GRUVBOX_PURPLE;
+              break;
+          }
+
+          DrawLineEx(start, end, cell_width * step, barColor); // Draw the radial bar
+          break;
+        }
+      }
     }
+  }
 }
 
 void DrawHelpBox(bool showHelp, Font font, const int screenHeight, const int screenWidth)
@@ -536,10 +580,29 @@ void extract_metadata(const char* filename, MusicMetadata* metadata)
   avformat_close_input(&fmt_ctx);
 }
 
-int main()
+int main(int argc, char* argv[])
 {
   const int screenWidth  = 1280;
   const int screenHeight = 720;
+
+  if (argc > 1)
+  {
+    if (is_song_file(argv[1]))
+    {
+      strcpy(selected_song, argv[1]);
+      printf("Selected song: %s\n", selected_song);
+    }
+    else
+    {
+      printf("Error: %s is not a valid audio file.\n", argv[1]);
+      return 1;
+    }
+  }
+  else
+  {
+    printf(" [rAVen]\nNo arguments provided.\n");
+    return 1;
+  }
 
   InitWindow(screenWidth, screenHeight, "rAVen");
   SetTargetFPS(60);
@@ -662,19 +725,19 @@ int main()
 
     /****************************************************************************
      *
-     * @What is N? 
+     * @What is N?
      *
-     * It is the total number of frequency bins we need for audio analysis 
+     * It is the total number of frequency bins we need for audio analysis
      *
-     * I took 1<<13 (2 to the power 13) as it was the greatest power with the 
-     * optimal performance and actually looked very cool, overall this gave 
+     * I took 1<<13 (2 to the power 13) as it was the greatest power with the
+     * optimal performance and actually looked very cool, overall this gave
      * the rAVen an actual AV experience.
      *
      * size_t m represents the frequency bands that will be visualized, so instead
-     * of iterating over N (which is a large number), we visualize an audio freq 
-     * range instead 
+     * of iterating over N (which is a large number), we visualize an audio freq
+     * range instead
      *
-     * I got step = 1.06f from an article online on conversion of frequencies to 
+     * I got step = 1.06f from an article online on conversion of frequencies to
      * visualizable audio
      *
      ****************************************************************************/

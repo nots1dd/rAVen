@@ -31,6 +31,15 @@ Check the comments in the [FFT](https://github.com/nots1dd/rAVen/blob/main/fft.c
 
 ## Building
 
+> [!WARNING]
+> 
+> Build Script is not available right now
+> 
+> It is going under some changes
+> 
+> Use Makefile instead
+> 
+
 Using the build script:
 
 ```sh 
