@@ -55,6 +55,14 @@ make
 ./raven
 ```
 
+Using CMake:
+
+```sh 
+cmake -S . -B build/
+cmake --build build/ 
+./build/raven 
+```
+
 ![raven1](https://github.com/user-attachments/assets/40ab07df-4f43-406d-b30f-77b133780d12)
 ![raven2](https://github.com/user-attachments/assets/3aa6de17-62b4-4f64-9b35-31ec6d0fbb5b)
 ![raven3](https://github.com/user-attachments/assets/51a291b7-12d6-41b1-af3d-52759791a093)
