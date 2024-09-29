@@ -38,11 +38,11 @@
 #define GRUVBOX_PURPLE \
   (Color) { 211, 134, 155, 255 } // #d3869b
 
-typedef struct
-{
-  float left;
-  float right;
-} Frame;
+/*typedef struct*/
+/*{*/
+/*  float left;*/
+/*  float right;*/
+/*} Frame;*/
 
 typedef enum
 {
@@ -67,7 +67,7 @@ typedef struct
  ********************************************************/
 
 float             freqs[N];
-Frame             global_frames[4800] = {0};
+float             global_frames[4800] = {0};
 size_t            global_frames_count = 0;
 float             in[N];
 float complex     out[N];
@@ -170,12 +170,12 @@ void SwitchVisualizationModeBackward() { currentMode = (currentMode - 1) % NUM_M
 void callback(void* bufferData, unsigned int frames)
 {
 
-  Frame* fs = bufferData;
+  float (*fs)[2] = bufferData;
 
   for (size_t i = 0; i < frames; i++)
   {
     memmove(in, in + 1, (N - 1) * sizeof(in[0]));
-    in[N - 1] = fs[i].left;
+    in[N - 1] = (fs[i][0]+fs[i][1])/2;
   }
 
   fft(in, 1, out, N);
@@ -651,6 +651,24 @@ int main(int argc, char* argv[])
       break;
     }
 
+    if (IsFileDropped()) {
+      PauseMusicStream(music);
+      FilePathList droppedFiles = LoadDroppedFiles();
+      printf("File dropped\n");
+      if (droppedFiles.count > 0) {
+        const char *file_path = droppedFiles.paths[0];
+        printf("%s", droppedFiles.paths[0]);
+        StopMusicStream(music);
+        UnloadMusicStream(music);
+        music = LoadMusicStream(file_path);
+        PlayMusicStream(music);
+        SetMusicVolume(music, currentVolume);
+        extract_metadata(file_path, &metadata);
+        AttachAudioStreamProcessor(music.stream, callback);
+      }
+      UnloadDroppedFiles(droppedFiles);
+    }
+
     // Detect if the user clicks on the info button
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && IsMouseOverRectangle(infoButton))
     {
@@ -662,11 +680,17 @@ int main(int argc, char* argv[])
     {
       PauseMusicStream(music);
       OpenFileDialog();
-      UnloadMusicStream(music);
-      music = LoadMusicStream(selected_song);
-      PlayMusicStream(music);
-      extract_metadata(selected_song, &metadata);
-      AttachAudioStreamProcessor(music.stream, callback);
+      if (is_song_file(selected_song)) {
+        UnloadMusicStream(music);
+        music = LoadMusicStream(selected_song);
+        PlayMusicStream(music);
+        SetMusicVolume(music, currentVolume);
+        extract_metadata(selected_song, &metadata);
+        AttachAudioStreamProcessor(music.stream, callback);
+      } else {
+        printf("NOT A VALID SONG FILE\n");
+        ResumeMusicStream(music);
+      }
     }
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && IsMouseOverRectangle(helpButton))
     {
@@ -751,9 +775,9 @@ int main(int argc, char* argv[])
     handleVisualization(cell_width, screenHeight, screenWidth, m);
 
     // Draw song title
-    const char* songTitle = "rAVen";
-    Vector2     titleSize = MeasureTextEx(font, songTitle, 40, 2);
-    DrawTextEx(font, songTitle, (Vector2){screenWidth / 2 - titleSize.x / 2, 20}, 40, 2,
+    const char* mainTitle = "rAVen";
+    Vector2     titleSize = MeasureTextEx(font, mainTitle, 40, 2);
+    DrawTextEx(font, mainTitle, (Vector2){screenWidth / 2 - titleSize.x / 2, 20}, 40, 2,
                GRUVBOX_BLUE);
 
     // Draw song details
