@@ -170,12 +170,12 @@ void SwitchVisualizationModeBackward() { currentMode = (currentMode - 1) % NUM_M
 void callback(void* bufferData, unsigned int frames)
 {
 
-  float (*fs)[2] = bufferData;
+  float(*fs)[2] = bufferData;
 
   for (size_t i = 0; i < frames; i++)
   {
     memmove(in, in + 1, (N - 1) * sizeof(in[0]));
-    in[N - 1] = (fs[i][0]+fs[i][1])/2;
+    in[N - 1] = (fs[i][0] + fs[i][1]) / 2;
   }
 
   fft(in, 1, out, N);
@@ -651,12 +651,14 @@ int main(int argc, char* argv[])
       break;
     }
 
-    if (IsFileDropped()) {
+    if (IsFileDropped())
+    {
       PauseMusicStream(music);
       FilePathList droppedFiles = LoadDroppedFiles();
       printf("File dropped\n");
-      if (droppedFiles.count > 0) {
-        const char *file_path = droppedFiles.paths[0];
+      if (droppedFiles.count > 0)
+      {
+        const char* file_path = droppedFiles.paths[0];
         printf("%s", droppedFiles.paths[0]);
         StopMusicStream(music);
         UnloadMusicStream(music);
@@ -680,14 +682,17 @@ int main(int argc, char* argv[])
     {
       PauseMusicStream(music);
       OpenFileDialog();
-      if (is_song_file(selected_song)) {
+      if (is_song_file(selected_song))
+      {
         UnloadMusicStream(music);
         music = LoadMusicStream(selected_song);
         PlayMusicStream(music);
         SetMusicVolume(music, currentVolume);
         extract_metadata(selected_song, &metadata);
         AttachAudioStreamProcessor(music.stream, callback);
-      } else {
+      }
+      else
+      {
         printf("NOT A VALID SONG FILE\n");
         ResumeMusicStream(music);
       }
