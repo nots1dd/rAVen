@@ -729,18 +729,15 @@ int main(int argc, char* argv[])
     }
     if (IsKeyPressed(KEY_M))
     {
+      isMuted = !isMuted
       if (isMuted)
       {
-        currentVolume = lastVolume;
-        isMuted       = false;
+        SetMusicVolume(music, 0.0);
       }
       else
       {
-        lastVolume    = currentVolume;
-        currentVolume = 0.0f; // Mute
-        isMuted       = true;
+        SetMusicVolume(music, currentVolume);
       }
-      SetMusicVolume(music, currentVolume);
     }
 
     BeginDrawing();
