@@ -51,6 +51,16 @@ To dive deeper, check out the comments in the [FFT.c](https://github.com/nots1dd
 > The build script is currently unavailable as it's undergoing changes.
 > For now, use the **Makefile**.
 
+> [!IMPORTANT]
+> 
+> DYNAMIC BUILD for rAVen is on another branch
+> 
+> rAVen-made-easC is made possible by [easC](https://github.com/nots1dd/easc) framework:
+> An effective lightweight framework that allows for dynamic build and handling of any C project
+> 
+> Check out the branch [here](https://github.com/nots1dd/rAVen/blob/rAVen-made-easC/readme.md)
+> 
+
 ### <a id="using-build-script"></a>Using the Build Script:
 ```bash
 chmod +x build.sh
