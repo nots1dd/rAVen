@@ -45,7 +45,7 @@ To dive deeper, check out the comments in the [FFT.c](https://github.com/nots1dd
 
 ---
 
-## <a id="building"></a>Building rAVen
+## <a id="building"></a>Building rAVen 
 
 > [!WARNING]
 > The build script is currently unavailable as it's undergoing changes.
