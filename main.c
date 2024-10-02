@@ -649,6 +649,10 @@ int main(int argc, char* argv[])
     if (IsKeyPressed(KEY_Q))
     {
       break;
+      UnloadMusicStream(music);
+      CloseAudioDevice();
+      CloseWindow();
+      return 0;
     }
 
     if (IsFileDropped())
