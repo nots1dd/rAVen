@@ -733,7 +733,7 @@ int main(int argc, char* argv[])
     }
     if (IsKeyPressed(KEY_M))
     {
-      isMuted = !isMuted
+      isMuted = !isMuted;
       if (isMuted)
       {
         SetMusicVolume(music, 0.0);
