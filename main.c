@@ -73,6 +73,7 @@ size_t            global_frames_count = 0;
 float             in[N];
 float complex     out[N];
 float             max_amp;
+float global_sample_rate;
 char              selected_song[512];
 VisualizationMode currentMode = STANDARD;
 const char* helpCommands[]    = {"f            - Play a media file (GTK file dialog will open)\n",
@@ -104,6 +105,32 @@ void rAVen_sig_abrt(int signal_num) {
     exit(signal_num);  // Exit gracefully
 }
 
+/***************************************
+ *
+ * $LOW_PASS_FILTER
+ *
+ * -> apply_low_pass_filter :: Applies a low-pass filter
+ *    by zeroing out frequencies above the cutoff frequency.
+ *
+ * $NOTE
+ *
+ * The cutoff bin is calculated based on
+ * the ratio of the cutoff frequency to the
+ * sample rate, ensuring that only frequencies
+ * below the cutoff remain.
+ *
+ ***************************************/
+
+void apply_low_pass_filter(float complex out[], size_t n, float sample_rate, float cutoff_frequency)
+{
+  size_t cutoff_bin = (size_t)(cutoff_frequency / (sample_rate / (float)n));
+
+  for (size_t i = cutoff_bin; i < n; i++)
+  {
+    out[i] = 0;
+  }
+}
+
 /*************************************************************
  *
  *  @FAST FOURIER TRANSFORM
@@ -129,7 +156,7 @@ void rAVen_sig_abrt(int signal_num) {
  *
  ************************************************************/
 
-void fft(float in[], size_t stride, float complex out[], size_t n)
+void fft(float in[], size_t stride, float complex out[], size_t n, float sample_rate)
 {
   assert(n > 0);
   if (n == 1)
@@ -146,8 +173,8 @@ void fft(float in[], size_t stride, float complex out[], size_t n)
    * In python :: arr[i::k] where k is the step
    *
    ********************************************/
-  fft(in, stride * 2, out, n / 2);
-  fft(in + stride, stride * 2, out + n / 2, n / 2);
+  fft(in, stride * 2, out, n / 2, sample_rate);
+  fft(in + stride, stride * 2, out + n / 2, n / 2, sample_rate);
 
   for (size_t k = 0; k < n / 2; k++)
   {
@@ -157,6 +184,8 @@ void fft(float in[], size_t stride, float complex out[], size_t n)
     out[k]          = e + v;
     out[k + n / 2]  = e - v;
   }
+  
+  apply_low_pass_filter(out, n, sample_rate, 99999.0f);
 }
 
 /***************************************
@@ -198,7 +227,7 @@ void callback(void* bufferData, unsigned int frames)
     in[N - 1] = (fs[i][0] + fs[i][1]) / 2;
   }
 
-  fft(in, 1, out, N);
+  fft(in, 1, out, N, global_sample_rate);
 
   max_amp = 0.0f;
   for (size_t i = 0; i < frames; i++)
@@ -637,6 +666,7 @@ int main(int argc, char* argv[])
   Music         music    = LoadMusicStream(selected_song);
   MusicMetadata metadata = {0};
   extract_metadata(selected_song, &metadata);
+  global_sample_rate = (float)music.stream.sampleRate;
   assert(music.stream.sampleSize == 32);
   assert(music.stream.channels == 2);
 
