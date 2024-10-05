@@ -4,6 +4,7 @@
 #include <libavformat/avformat.h>
 #include <magic.h>
 #include <math.h>
+#include <signal.h>
 #include <raylib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -83,6 +84,25 @@ const char* helpCommands[]    = {"f            - Play a media file (GTK file dia
                                  "v            - Cycle through visual modes (forward)\n",
                                  "b            - Cycle through visual modes (backward)\n",
                                  "? - Display the list of available commands"};
+
+/*************************************************************
+ *
+ * @SIGNAL HANDLING 
+ *
+ * For graceful exits and better error handling of the cases:
+ *
+ * -> IOT Instruction / Core Dump 
+ * -> Segmentation Fault 
+ * 
+ * The above the are the most common signals to look after in 
+ * the case for rAVen
+ *
+ ************************************************************/
+
+void rAVen_sig_abrt(int signal_num) {
+    printf("[rAVen] Received exit signal.\n Goodbye!", signal_num);
+    exit(signal_num);  // Exit gracefully
+}
 
 /*************************************************************
  *
@@ -582,6 +602,12 @@ void extract_metadata(const char* filename, MusicMetadata* metadata)
 
 int main(int argc, char* argv[])
 {
+  /******************************
+   * @SIGNAL DECLS
+   ******************************/
+
+  signal(SIGABRT, rAVen_sig_abrt);
+
   const int screenWidth  = 1280;
   const int screenHeight = 720;
 
@@ -733,7 +759,7 @@ int main(int argc, char* argv[])
     }
     if (IsKeyPressed(KEY_M))
     {
-      isMuted = !isMuted
+      isMuted = !isMuted;
       if (isMuted)
       {
         SetMusicVolume(music, 0.0);
@@ -804,7 +830,7 @@ int main(int argc, char* argv[])
 
     // Draw volume level
     char volumeBuffer[50];
-    snprintf(volumeBuffer, sizeof(volumeBuffer), "Volume: %.0f%%", currentVolume * 100);
+    snprintf(volumeBuffer, sizeof(volumeBuffer), "Volume: %.0f%% %s", currentVolume * 100, isMuted ? "!" : "");
     DrawTextEx(font, volumeBuffer, (Vector2){10, 40}, 20, 1, GRUVBOX_AQUA);
 
     // Draw info button

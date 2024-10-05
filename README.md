@@ -58,7 +58,7 @@ To dive deeper, check out the comments in the [FFT.c](https://github.com/nots1dd
 > rAVen-made-easC is made possible by [easC](https://github.com/nots1dd/easc) framework:
 > An effective lightweight framework that allows for dynamic build and handling of any C project
 > 
-> Check out the branch [here](https://github.com/nots1dd/rAVen/blob/rAVen-made-easC/readme.md)
+> Check out the branch [here](https://github.com/nots1dd/rAVen/tree/rAVen-made-easC/readme.md)
 > 
 
 ### <a id="using-build-script"></a>Using the Build Script:
